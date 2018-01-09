@@ -95,6 +95,9 @@
       (bench-basic-query :datascript)
       (bench-basic-query :datomic)))
 
+(defn -main [& args]
+  (run-benchmarks (init-dbs)))
+
 (comment
 
   (def dbs (init-dbs))
