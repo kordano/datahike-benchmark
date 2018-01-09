@@ -9,18 +9,6 @@
             [hitchhiker.tree.core :as hc :refer [<??]]
             [konserve.filestore :refer [new-fs-store]]))
 
-(def db (d/db-with
-         (d/empty-db {:name {:db/index true}})
-         [{ :db/id 1, :name "Ivan", :age 15 }
-          { :db/id 2, :name "Petr", :age 37 }
-          { :db/id 3, :name "Ivan", :age 37 }
-          { :db/id 4, :age 15 }]))
-
-(def store (kons/add-hitchhiker-tree-handlers
-            (async/<!! (new-fs-store "/tmp/datahike-play"))))
-
-
-(def backend (kons/->KonserveBackend store))
 
 (defn store-db [db backend]
   (let [{:keys [eavt-durable aevt-durable avet-durable]} db]
@@ -62,6 +50,9 @@
 
 (defn init-dbs []
   (let [uri             "datomic:mem://datahike"
+        backend (kons/->KonserveBackend store)
+        store (kons/add-hitchhiker-tree-handlers
+               (async/<!! (new-fs-store "/tmp/datahike-play")))
         datomic-schema  [{:db/id                 #db/id[:db.part/db]
                           :db/ident              :name
                           :db/index              true
@@ -82,7 +73,9 @@
     (time (load-test-data datascript-conn :datascript))
     (time (load-test-data datomic-conn :datomic))
     (atom {:datascript (load-db (store-db @datascript-conn backend))
-          :datomic    (dt/db datomic-conn)})))
+           :datomic    (dt/db datomic-conn)
+           :store store
+           :backend backend})))
 
 
 
