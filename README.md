@@ -1,5 +1,5 @@
 # datahike-benchmark
-Comparison of datascript and datomic query engines.
+Comparison of datahike, datascript and datomic query engines.
 
 ## Usage
 Make sure [Leiningen](https://leiningen.org/) is installed. Run datascript/datomic benchmarks with:
