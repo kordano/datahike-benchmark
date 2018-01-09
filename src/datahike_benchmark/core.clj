@@ -17,7 +17,7 @@
      :avet-key (kons/get-root-key (:tree (<?? (hc/flush-tree avet-durable backend))))}))
 
 
-(defn load-db [stored-db]
+(defn load-db [store stored-db]
   (let [{:keys [eavt-key aevt-key avet-key]} stored-db
         empty                                (d/empty-db)
         eavt-durable                         (<?? (kons/create-tree-from-root-key store eavt-key))]
@@ -50,9 +50,9 @@
 
 (defn init-dbs []
   (let [uri             "datomic:mem://datahike"
-        backend (kons/->KonserveBackend store)
         store (kons/add-hitchhiker-tree-handlers
                (async/<!! (new-fs-store "/tmp/datahike-play")))
+        backend (kons/->KonserveBackend store)
         datomic-schema  [{:db/id                 #db/id[:db.part/db]
                           :db/ident              :name
                           :db/index              true
@@ -72,7 +72,7 @@
     @(dt/transact datomic-conn datomic-schema)
     (time (load-test-data datascript-conn :datascript))
     (time (load-test-data datomic-conn :datomic))
-    (atom {:datascript (load-db (store-db @datascript-conn backend))
+    (atom {:datascript (load-db store (store-db @datascript-conn backend))
            :datomic    (dt/db datomic-conn)
            :store store
            :backend backend})))
