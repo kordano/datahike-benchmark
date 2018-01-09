@@ -2,6 +2,9 @@
   (:require [datahike.core :as d]
             [datahike.db :as db]
             [datahike.query :as q]
+            [datascript.core :as ds]
+            [datascript.db :as dsb]
+            [datascript.query :as qs]
             [datomic.api :as dt]
             [clojure.core.async :as async]
             [criterium.core :as crit]
@@ -34,7 +37,7 @@
                         (range 10000))]
     (println "Initialize" db-type)
     (loop [n     0
-           users (if (= db-type :datascript)
+           users (if (or (= db-type :datahike) (= db-type :datascript))
                    test-data
                    (mapv
                     (fn [u]
@@ -43,9 +46,10 @@
       (if (empty? users)
         {:datoms n}
         (let [[txs next-txs] (split-at 100 users)]
-          (recur (+ n (count (if (= db-type :datascript)
-                               (d/transact! conn (vec txs))
-                               @(dt/transact conn (vec txs)))))
+          (recur (+ n (count (case db-type 
+                               :datahike (d/transact! conn (vec txs))
+                               :datascript (ds/transact! conn (vec txs))
+                               :datomic @(dt/transact conn (vec txs)))))
                  next-txs))))))
 
 (defn init-dbs []
@@ -64,36 +68,40 @@
                           :db/valueType          :db.type/long
                           :db/cardinality        :db.cardinality/one
                           :db.install/_attribute :db.part/db}]
-        datascript-conn (d/create-conn {:name {:db/index true}})
+        datahike-conn (d/create-conn {:name {:db/index true}})
+        datascript-conn (ds/create-conn {:name {:db/index true}})
         datomic-conn (do
                        (dt/delete-database uri)
                        (dt/create-database uri)
                        (dt/connect uri))]
     @(dt/transact datomic-conn datomic-schema)
-    (time (load-test-data datascript-conn :datascript))
+    (time (load-test-data datahike-conn :datahike))
     (time (load-test-data datomic-conn :datomic))
-    (atom {:datascript (load-db store (store-db @datascript-conn backend))
+    (time (load-test-data datascript-conn :datascript))
+    (atom {:datahike (load-db store (store-db @datahike-conn backend))
+           :datascript datascript-conn
            :datomic    (dt/db datomic-conn)
            :store store
            :backend backend})))
-
-
 
 (defn bench-basic-query [dbs db-type]
   (let [query '[:find ?e :where [?e :name "user99"]]]
     (println "Testing simple query" db-type "...")
     (crit/with-progress-reporting
-     (crit/bench
-      (if (= db-type :datascript)
-        (d/q query (:datascript @dbs))
-        (dt/q query (:datomic @dbs)))
+      (crit/bench
+       (case db-type
+         :datahike (d/q query (:datahike @dbs))
+         :datascript (ds/q query (-> dbs deref :datascript deref))
+         :datomic (dt/q query (:datomic @dbs)))
       :verbose))
     dbs))
 
 (defn run-benchmarks [dbs]
   (-> dbs
+      (bench-basic-query :datahike)
+      (bench-basic-query :datomic)
       (bench-basic-query :datascript)
-      (bench-basic-query :datomic)))
+      ))
 
 (defn -main [& args]
   (run-benchmarks (init-dbs)))
@@ -106,10 +114,10 @@
 
   (bench-basic-query dbs :datomic)
 
-  (time (d/q '[:find (count ?e) :where [?e :name _]] (:datascript @dbs)))
+  (time (d/q '[:find (count ?e) :where [?e :name _]] (:datahike @dbs)))
   (time (dt/q '[:find (count ?e) :where [?e :name _]] (:datomic @dbs)))
 
-  (time (d/q '[:find ?e :where [?e :age 20]] (:datascript @dbs)))
+  (time (d/q '[:find ?e :where [?e :age 20]] (:datahike @dbs)))
   (time (dt/q '[:find ?e :where [?e :age 20]] (:datomic @dbs)))
 
   )
