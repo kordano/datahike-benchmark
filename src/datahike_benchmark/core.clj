@@ -85,48 +85,35 @@
           :datomic    (dt/db datomic-conn)})))
 
 
+
+(defn bench-basic-query [dbs db-type]
+  (let [query '[:find ?e :where [?e :name "user99"]]]
+    (println "Testing simple query" db-type "...")
+    (crit/with-progress-reporting
+     (crit/bench
+      (if (= db-type :datascript)
+        (d/q query (:datascript @dbs))
+        (dt/q query (:datomic @dbs)))
+      :verbose))
+    dbs))
+
+(defn run-benchmarks [dbs]
+  (-> dbs
+      (bench-basic-query :datascript)
+      (bench-basic-query :datomic)))
+
 (comment
 
   (def dbs (init-dbs))
-  
-  (crit/with-progress-reporting
-    (crit/bench
-     (dt/q '[:find ?e :where [?e :name "user99"]] (:datomic @dbs))))
 
-  (crit/with-progress-reporting
-    (crit/bench
-     (d/q '[:find ?e :where [?e :name "user99"]] (:datascript @dbs))))
+  (run-benchmarks dbs)
 
-  (time(dt/q '[:find (count ?e) :where [?e :name _]] datomic-db))
+  (bench-basic-query dbs :datomic)
 
-  (time (d/q '[:find (count ?e) :where [?e :name _]] datascript-db))
+  (time (d/q '[:find (count ?e) :where [?e :name _]] (:datascript @dbs)))
+  (time (dt/q '[:find (count ?e) :where [?e :name _]] (:datomic @dbs)))
 
-
-
-  ;; ---------------------------------------------------------------
-  ;; Storage
-  (time (def db (d/db-with (d/empty-db {:name {:db/index true}}) test-data)))
-
-  (time (def stored-db (store-db db backend)))
-
-  (time (def loaded-db (load-db stored-db)))
-
-  (d/q '[:find ?e
-         :where [?e :name]] loaded-db)
-  ;; => #{[3] [2] [1]}
-
-  (def updated (d/db-with loaded-db [{:db/id -1 :name "Hiker" :age 9999}]))
-
-  (d/q '[:find ?e :where [?e :name "Hiker"]] loaded-db)
-  ;; => #{}
-
-  (d/q '[:find ?e :where [?e :name "Hiker"]] updated)
-  ;; => #{[5]}
-
-  (time (d/q '[:find ?e :where [?e :name "user99"]] loaded-db))
-
-  (time (d/q '[:find ?e :where [?e :age 20]] loaded-db))
-
-  (crit/with-progress-reporting (crit/quick-bench (d/q '[:find ?e :where [?e :age 20]] loaded-db)))
+  (time (d/q '[:find ?e :where [?e :age 20]] (:datascript @dbs)))
+  (time (dt/q '[:find ?e :where [?e :age 20]] (:datomic @dbs)))
 
   )
