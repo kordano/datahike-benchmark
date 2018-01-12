@@ -98,7 +98,8 @@
 
 (defn run-benchmarks [dbs]
   (-> dbs
-      (benchmark-query '[:find ?e :where [?e :name "user99"]])))
+      (benchmark-query '[:find ?e :where [?e :name "user99"]])
+      true))
 
 (defn -main [& args]
   (run-benchmarks (init-dbs)))
