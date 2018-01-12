@@ -34,7 +34,7 @@
   (let [test-data (mapv (fn [n] {:db/id n
                                  :name  (str "user" n)
                                  :age   (rand-int 100)})
-                        (range 10000))]
+                        (range 100000))]
     (println "Initialize" db-type)
     (loop [n     0
            users (if (or (= db-type :datahike) (= db-type :datascript))
@@ -46,7 +46,7 @@
       (if (empty? users)
         {:datoms n}
         (let [[txs next-txs] (split-at 100 users)]
-          (recur (+ n (count (case db-type 
+          (recur (+ n (count (case db-type
                                :datahike (d/transact! conn (vec txs))
                                :datascript (ds/transact! conn (vec txs))
                                :datomic @(dt/transact conn (vec txs)))))
@@ -54,9 +54,6 @@
 
 (defn init-dbs []
   (let [uri             "datomic:mem://datahike"
-        store (kons/add-hitchhiker-tree-handlers
-               (async/<!! (new-fs-store "/tmp/datahike-play")))
-        backend (kons/->KonserveBackend store)
         datomic-schema  [{:db/id                 #db/id[:db.part/db]
                           :db/ident              :name
                           :db/index              true
@@ -78,30 +75,30 @@
     (time (load-test-data datahike-conn :datahike))
     (time (load-test-data datomic-conn :datomic))
     (time (load-test-data datascript-conn :datascript))
-    (atom {:datahike (load-db store (store-db @datahike-conn backend))
+    (atom {:datahike datahike-conn
            :datascript datascript-conn
-           :datomic    (dt/db datomic-conn)
-           :store store
-           :backend backend})))
+           :datomic    (dt/db datomic-conn)})))
 
-(defn bench-basic-query [dbs db-type]
-  (let [query '[:find ?e :where [?e :name "user99"]]]
-    (println "Testing simple query" db-type "...")
-    (crit/with-progress-reporting
-      (crit/bench
-       (case db-type
-         :datahike (d/q query (:datahike @dbs))
-         :datascript (ds/q query (-> dbs deref :datascript deref))
-         :datomic (dt/q query (:datomic @dbs)))
-      :verbose))
-    dbs))
+(defn benchmark-query-by-type [dbs db-type query]
+  (println "Testing query " query " on " db-type "...")
+  (crit/with-progress-reporting
+    (crit/bench
+     (case db-type
+       :datahike   (d/q query (-> dbs deref :datahike deref))
+       :datascript (ds/q query (-> dbs deref :datascript deref))
+       :datomic    (dt/q query (:datomic @dbs)))
+     :verbose))
+  dbs)
+
+(defn benchmark-query [dbs query]
+  (-> dbs
+      (benchmark-query-by-type :datahike query)
+      (benchmark-query-by-type :datomic query)
+      (benchmark-query-by-type :datascript query)))
 
 (defn run-benchmarks [dbs]
   (-> dbs
-      (bench-basic-query :datahike)
-      (bench-basic-query :datomic)
-      (bench-basic-query :datascript)
-      ))
+      (benchmark-query '[:find ?e :where [?e :name "user99"]])))
 
 (defn -main [& args]
   (run-benchmarks (init-dbs)))
@@ -112,7 +109,6 @@
 
   (run-benchmarks dbs)
 
-  (bench-basic-query dbs :datomic)
 
   (time (d/q '[:find (count ?e) :where [?e :name _]] (:datahike @dbs)))
   (time (dt/q '[:find (count ?e) :where [?e :name _]] (:datomic @dbs)))
