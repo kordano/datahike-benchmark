@@ -80,7 +80,7 @@
            :datomic    (dt/db datomic-conn)})))
 
 (defn benchmark-query-by-type [dbs db-type query]
-  (println "Testing query " query " on " db-type "...")
+  (println "Testing query" query "on" db-type "...")
   (crit/with-progress-reporting
     (crit/bench
      (case db-type
@@ -99,7 +99,12 @@
 (defn run-benchmarks [dbs]
   (-> dbs
       (benchmark-query '[:find ?e :where [?e :name "user99"]])
-      true))
+      (benchmark-query '[:find ?e :where (not [?e :name "user99"])])
+      (benchmark-query dbs '[:find ?e :where [?e :age ?a] [(< 20 ?a)] [(< ?a 30)]])
+      (benchmark-query dbs '[:find (count ?e) :where [?e :name _]])
+      (benchmark-query dbs '[:find (count ?e) :where [?e :age ?a] [(< 20 ?a)] [(< ?a 30)]])
+      )
+  true)
 
 (defn -main [& args]
   (run-benchmarks (init-dbs)))
@@ -108,13 +113,20 @@
 
   (def dbs (init-dbs))
 
-  (run-benchmarks dbs)
 
+  (def query '[:find ?a .
+               :where
+               [?e :name "user99"]
+               [?e :age ?a]])
 
-  (time (d/q '[:find (count ?e) :where [?e :name _]] (:datahike @dbs)))
-  (time (dt/q '[:find (count ?e) :where [?e :name _]] (:datomic @dbs)))
+  (def query-2 '[:find (count ?e) .
+               :where
+               [?e :age ?a]
+               [(< 20 ?a)]
+               [(< ?a 30)]])
 
-  (time (d/q '[:find ?e :where [?e :age 20]] (:datahike @dbs)))
-  (time (dt/q '[:find ?e :where [?e :age 20]] (:datomic @dbs)))
+  (d/q query (-> dbs deref :datahike deref))
+
+  (d/q query-2 (-> dbs deref :datahike deref))
 
   )
