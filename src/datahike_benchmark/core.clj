@@ -30,11 +30,11 @@
            :aevt-durable (<?? (kons/create-tree-from-root-key store aevt-key))
            :avet-durable (<?? (kons/create-tree-from-root-key store avet-key)))))
 
-(defn load-test-data [conn db-type]
+(defn load-test-data [conn db-type sample-size]
   (let [test-data (mapv (fn [n] {:db/id n
                                  :name  (str "user" n)
                                  :age   (rand-int 100)})
-                        (range 100000))]
+                        (range sample-size))]
     (println "Initialize" db-type)
     (loop [n     0
            users (if (or (= db-type :datahike) (= db-type :datascript))
@@ -52,7 +52,7 @@
                                :datomic @(dt/transact conn (vec txs)))))
                  next-txs))))))
 
-(defn init-dbs []
+(defn init-dbs [sample-size]
   (let [uri             "datomic:mem://datahike"
         datomic-schema  [{:db/id                 #db/id[:db.part/db]
                           :db/ident              :name
@@ -72,9 +72,9 @@
                        (dt/create-database uri)
                        (dt/connect uri))]
     @(dt/transact datomic-conn datomic-schema)
-    (time (load-test-data datahike-conn :datahike))
-    (time (load-test-data datomic-conn :datomic))
-    (time (load-test-data datascript-conn :datascript))
+    (time (load-test-data datahike-conn :datahike sample-size))
+    (time (load-test-data datomic-conn :datomic sample-size))
+    (time (load-test-data datascript-conn :datascript sample-size))
     (atom {:datahike datahike-conn
            :datascript datascript-conn
            :datomic    (dt/db datomic-conn)})))
@@ -99,34 +99,19 @@
 (defn run-benchmarks [dbs]
   (-> dbs
       (benchmark-query '[:find ?e :where [?e :name "user99"]])
-      (benchmark-query '[:find ?e :where (not [?e :name "user99"])])
-      (benchmark-query dbs '[:find ?e :where [?e :age ?a] [(< 20 ?a)] [(< ?a 30)]])
-      (benchmark-query dbs '[:find (count ?e) :where [?e :name _]])
-      (benchmark-query dbs '[:find (count ?e) :where [?e :age ?a] [(< 20 ?a)] [(< ?a 30)]])
+      (benchmark-query '[:find ?e :where [?e :age ?a] [(< 20 ?a)] [(< ?a 30)]])
+      (benchmark-query '[:find (count ?e) :where [?e :name _]])
+      (benchmark-query '[:find (count ?e) :where [?e :age ?a] [(< 20 ?a)] [(< ?a 30)]])
       )
   true)
 
 (defn -main [& args]
-  (run-benchmarks (init-dbs)))
+  (run-benchmarks (init-dbs 100000)))
 
 (comment
 
-  (def dbs (init-dbs))
+  (def dbs (init-dbs 100000))
 
-
-  (def query '[:find ?a .
-               :where
-               [?e :name "user99"]
-               [?e :age ?a]])
-
-  (def query-2 '[:find (count ?e) .
-               :where
-               [?e :age ?a]
-               [(< 20 ?a)]
-               [(< ?a 30)]])
-
-  (d/q query (-> dbs deref :datahike deref))
-
-  (d/q query-2 (-> dbs deref :datahike deref))
+  (run-benchmarks dbs)
 
   )
